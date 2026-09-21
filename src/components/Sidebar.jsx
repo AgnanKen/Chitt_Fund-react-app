@@ -1,4 +1,3 @@
-import React from "react";
 
 import {
   LayoutDashboard,
@@ -12,13 +11,12 @@ import {
   X,
 } from "lucide-react";
 
-
 const Sidebar = ({
   sidebarOpen,
   setSidebarOpen,
   activeMenu = "Dashboard",
+  onSelectMenu,
 }) => {
-
   const menuItems = [
     {
       name: "Dashboard",
@@ -46,14 +44,18 @@ const Sidebar = ({
     },
   ];
 
+  const handleItemClick = (menuName) => {
+    if (onSelectMenu) {
+      onSelectMenu(menuName);
+    }
+    setSidebarOpen(false);
+  };
 
   return (
     <>
-
       {/* =========================
           MOBILE OVERLAY
       ========================= */}
-
       {sidebarOpen && (
         <div
           className="sidebar-overlay"
@@ -61,130 +63,80 @@ const Sidebar = ({
         />
       )}
 
-
       {/* =========================
           SIDEBAR
       ========================= */}
-
-      <aside
-        className={`sidebar ${
-          sidebarOpen ? "sidebar-open" : ""
-        }`}
-      >
-
+      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         {/* =========================
             LOGO
         ========================= */}
-
-        <div className="sidebar-logo">
-
+        <div
+          className="sidebar-logo"
+          style={{ cursor: "pointer" }}
+          onClick={() => handleItemClick("Dashboard")}
+        >
           <div className="logo-icon">
-
             <CircleDollarSign size={22} />
-
           </div>
-
-          <span>
-           LedgerOne
-          </span>
-
+          <span>LedgerOne</span>
 
           {/* Mobile Close */}
-
           <button
             className="mobile-close"
-            onClick={() => setSidebarOpen(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSidebarOpen(false);
+            }}
           >
-
             <X size={20} />
-
           </button>
-
         </div>
-
 
         {/* =========================
             MENU
         ========================= */}
-
         <div className="menu-section">
-
-          <p className="menu-title">
-            MAIN MENU
-          </p>
-
+          <p className="menu-title">MAIN MENU</p>
 
           <div className="sidebar-menu">
-
             {menuItems.map((item) => (
-
               <div
                 key={item.name}
                 className={`menu-item ${
-                  activeMenu === item.name
-                    ? "active"
-                    : ""
+                  activeMenu === item.name ? "active" : ""
                 }`}
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => handleItemClick(item.name)}
+                style={{ cursor: "pointer" }}
               >
-
-                <span className="menu-icon">
-                  {item.icon}
-                </span>
-
-                <span>
-                  {item.name}
-                </span>
-
+                <span className="menu-icon">{item.icon}</span>
+                <span>{item.name}</span>
               </div>
-
             ))}
-
           </div>
-
         </div>
-
 
         {/* =========================
-            ADMIN PROFILE
+            ADMIN PROFILE / FOOTER
         ========================= */}
-
         <div className="sidebar-bottom">
-
-          <div className="admin-profile">
-
-            <div className="admin-avatar">
-              A
-            </div>
-
+          <div
+            className="admin-profile"
+            style={{ cursor: "pointer" }}
+            onClick={() => handleItemClick("Settings")}
+          >
+            <div className="admin-avatar">A</div>
 
             <div className="admin-details">
-
-              <strong>
-                Admin
-              </strong>
-
-              <span>
-                Super Admin
-              </span>
-
+              <strong>Admin</strong>
+              <span>Super Admin</span>
             </div>
 
-
-            <LogOut
-              size={19}
-              className="logout-icon"
-            />
-
+            <LogOut size={19} className="logout-icon" />
           </div>
-
         </div>
-
       </aside>
-
     </>
   );
 };
-
 
 export default Sidebar;
