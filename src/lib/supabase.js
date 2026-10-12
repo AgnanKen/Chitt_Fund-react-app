@@ -4,7 +4,23 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Check if credentials are meaningfully set
+// Clean any leftover demo query params from the browser address bar
+if (typeof window !== "undefined") {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("mock") || url.searchParams.has("demo")) {
+      url.searchParams.delete("mock");
+      url.searchParams.delete("demo");
+      window.history.replaceState({}, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : ""));
+    }
+    window.localStorage?.removeItem("ledgerone_mode");
+    window.localStorage?.removeItem("ledgerone_demo_mode");
+  } catch {
+    // ignore
+  }
+}
+
+// Check if credentials are set
 export const isSupabaseConfigured = () => {
   return Boolean(
     supabaseUrl &&
@@ -14,12 +30,21 @@ export const isSupabaseConfigured = () => {
   );
 };
 
-// Initialize the Supabase client
-// If keys are not yet configured, initialize with safe dummy strings to prevent build/init crashes
-export const supabase = createClient(
-  isSupabaseConfigured() ? supabaseUrl : "https://placeholder-domain.supabase.co",
-  isSupabaseConfigured() ? supabaseAnonKey : "placeholder-anon-key"
-);
+// Initialize live Supabase client
+const validUrl =
+  supabaseUrl && supabaseUrl.startsWith("http") && !supabaseUrl.includes("your-project-ref")
+    ? supabaseUrl
+    : "https://placeholder-domain.supabase.co";
+
+const validKey = supabaseAnonKey || "placeholder-anon-key";
+
+export const supabase = createClient(validUrl, validKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 // ====================================================================
 // FALLBACK SEED DATA (Used when Supabase credentials are not yet configured)

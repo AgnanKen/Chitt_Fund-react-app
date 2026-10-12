@@ -9,11 +9,11 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
-import { supabase, isSupabaseConfigured, SEED_SCHEMES } from "../lib/supabase";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const ChitSchemes = () => {
-  const [schemes, setSchemes] = useState(SEED_SCHEMES);
-  const [loading] = useState(false);
+  const [schemes, setSchemes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -36,20 +36,20 @@ const ChitSchemes = () => {
   // Real-time synchronization
   useEffect(() => {
     const fetchSchemes = async () => {
-      if (isSupabaseConfigured()) {
-        try {
-          const { data, error } = await supabase
-            .from("chit_schemes")
-            .select("*")
-            .order("created_at", { ascending: false });
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("chit_schemes")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-          if (error) throw error;
-          if (data && data.length > 0) {
-            setSchemes(data);
-          }
-        } catch (err) {
-          console.warn("Supabase fetch failed, using seed data:", err.message);
-        }
+        if (error) throw error;
+        setSchemes(data || []);
+      } catch (err) {
+        console.warn("Supabase fetch failed on ChitSchemes:", err.message);
+        setSchemes([]);
+      } finally {
+        setLoading(false);
       }
     };
 

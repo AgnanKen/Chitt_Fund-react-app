@@ -11,11 +11,11 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { supabase, isSupabaseConfigured, SEED_MEMBERS } from "../lib/supabase";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const UserManagement = () => {
-  const [members, setMembers] = useState(SEED_MEMBERS);
-  const [loading] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKycFilter, setSelectedKycFilter] = useState("All");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -37,20 +37,20 @@ const UserManagement = () => {
   // Real-time synchronization
   useEffect(() => {
     const fetchMembers = async () => {
-      if (isSupabaseConfigured()) {
-        try {
-          const { data, error } = await supabase
-            .from("members")
-            .select("*")
-            .order("created_at", { ascending: false });
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("members")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-          if (error) throw error;
-          if (data && data.length > 0) {
-            setMembers(data);
-          }
-        } catch (err) {
-          console.warn("Supabase fetch failed, using seed data:", err.message);
-        }
+        if (error) throw error;
+        setMembers(data || []);
+      } catch (err) {
+        console.warn("Supabase fetch failed on UserManagement:", err.message);
+        setMembers([]);
+      } finally {
+        setLoading(false);
       }
     };
 

@@ -2,8 +2,9 @@ import { useState } from "react";
 import "./App.css";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
+import { useAuth } from "./context/useAuth";
 
-// Pages
+// Admin Pages
 import Home from "./pages/Home";
 import UserManagement from "./pages/UserManagement";
 import ChitSchemes from "./pages/ChitSchemes";
@@ -12,47 +13,41 @@ import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 
+// Member pages
+import LoginPage from "./pages/LoginPage";
+import MemberDashboard from "./pages/member/MemberDashboard";
+import MemberPayments from "./pages/member/MemberPayments";
+import MemberSchemes from "./pages/member/MemberSchemes";
+
 function App() {
+  const { user, role, profile, loading, signOut } = useAuth();
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Page title mapping
-  const pageMeta = {
-    Dashboard: {
-      title: "Dashboard",
-      subtitle: "Welcome back, Admin",
-    },
-    "User Management": {
-      title: "User Management",
-      subtitle: "Manage members, KYC verification, and user profiles",
-    },
-    "Chit Schemes": {
-      title: "Chit Schemes",
-      subtitle: "Active schemes, fund pools, and enrollment capacities",
-    },
-    "Live Auctions": {
-      title: "Live Auctions",
-      subtitle: "Real-time bidding hall, discount rates, and dividend yields",
-    },
-    Payments: {
-      title: "Payments & Collections",
-      subtitle: "Installment ledger, verification approvals, and payouts",
-    },
-    Reports: {
-      title: "Financial Reports",
-      subtitle: "Audit statements, collection trends, and foreman yield",
-    },
-    Settings: {
-      title: "System Settings",
-      subtitle: "Database configuration, chit fund rules, and preferences",
-    },
+  const memberMenuItems = ["Dashboard", "My Schemes", "My Payments", "Live Auctions"];
+  const safeActiveMenu = role === "member" && !memberMenuItems.includes(activeMenu) ? "Dashboard" : activeMenu;
+
+  const adminPageMeta = {
+    Dashboard: { title: "Dashboard", subtitle: "Welcome back, Admin" },
+    "User Management": { title: "User Management", subtitle: "Manage members, KYC verification, and user profiles" },
+    "Chit Schemes": { title: "Chit Schemes", subtitle: "Active schemes, fund pools, and enrollment capacities" },
+    "Live Auctions": { title: "Live Auctions", subtitle: "Real-time bidding hall, discount rates, and dividend yields" },
+    Payments: { title: "Payments & Collections", subtitle: "Installment ledger, verification approvals, and payouts" },
+    Reports: { title: "Financial Reports", subtitle: "Audit statements, collection trends, and foreman yield" },
+    Settings: { title: "System Settings", subtitle: "Database configuration, chit fund rules, and preferences" },
   };
 
-  const currentMeta = pageMeta[activeMenu] || pageMeta.Dashboard;
+  const memberPageMeta = {
+    Dashboard: { title: "My Dashboard", subtitle: `Welcome back, ${profile?.full_name || "Member"}` },
+    "My Schemes": { title: "My Schemes", subtitle: "Your active chit enrollments and schedule" },
+    "My Payments": { title: "My Payments", subtitle: "Your payment history and receipts" },
+    "Live Auctions": { title: "Live Auctions", subtitle: "Bid participation and auction updates" },
+  };
 
-  // Render current page
-  const renderCurrentPage = () => {
-    switch (activeMenu) {
+  const currentMeta = role === "member" ? memberPageMeta[safeActiveMenu] || memberPageMeta.Dashboard : adminPageMeta[safeActiveMenu] || adminPageMeta.Dashboard;
+
+  const renderAdminPage = () => {
+    switch (safeActiveMenu) {
       case "Dashboard":
         return <Home onNavigate={(menu) => setActiveMenu(menu)} />;
       case "User Management":
@@ -72,36 +67,89 @@ function App() {
     }
   };
 
+  const renderMemberPage = () => {
+    switch (safeActiveMenu) {
+      case "My Schemes":
+        return <MemberSchemes onNavigate={(menu) => setActiveMenu(menu)} />;
+      case "My Payments":
+        return <MemberPayments onNavigate={(menu) => setActiveMenu(menu)} />;
+      case "Live Auctions":
+        return <LiveAuctions />;
+      case "Dashboard":
+      default:
+        return <MemberDashboard onNavigate={(menu) => setActiveMenu(menu)} />;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="auth-loading-screen">
+        <div className="auth-loader" />
+        <p>Loading LedgerOne...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  if (role === "member") {
+    return (
+      <div className="LedgerOne-dashboard">
+        <Sidebar
+          role="member"
+          user={user}
+          profile={profile}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          activeMenu={safeActiveMenu}
+          onSelectMenu={(menu) => setActiveMenu(menu)}
+          onLogout={signOut}
+        />
+
+        <main className="main-content">
+          <Navbar
+            title={currentMeta.title}
+            subtitle={currentMeta.subtitle}
+            onMenuClick={() => setSidebarOpen(true)}
+            onSettingsClick={() => setActiveMenu("Dashboard")}
+            user={user}
+            profile={profile}
+            role={role}
+            onLogout={signOut}
+          />
+          {renderMemberPage()}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="LedgerOne-dashboard">
-      {/* =========================
-          PERSISTENT SIDEBAR
-      ========================= */}
       <Sidebar
+        role="admin"
+        user={user}
+        profile={profile}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
-        activeMenu={activeMenu}
+        activeMenu={safeActiveMenu}
         onSelectMenu={(menu) => setActiveMenu(menu)}
+        onLogout={signOut}
       />
 
-      {/* =========================
-          MAIN CONTENT AREA
-      ========================= */}
       <main className="main-content">
-        {/* =========================
-            PERSISTENT NAVBAR
-        ========================= */}
         <Navbar
           title={currentMeta.title}
           subtitle={currentMeta.subtitle}
           onMenuClick={() => setSidebarOpen(true)}
           onSettingsClick={() => setActiveMenu("Settings")}
+          user={user}
+          profile={profile}
+          role={role}
+          onLogout={signOut}
         />
-
-        {/* =========================
-            ACTIVE PAGE COMPONENT
-        ========================= */}
-        {renderCurrentPage()}
+        {renderAdminPage()}
       </main>
     </div>
   );

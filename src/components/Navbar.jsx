@@ -5,24 +5,25 @@ import {
   Search,
   ChevronDown,
   Menu,
+  LogOut,
 } from "lucide-react";
-import { isSupabaseConfigured } from "../lib/supabase";
-
 const Navbar = ({
   title = "Dashboard",
   subtitle = "Welcome back, Admin",
   onMenuClick,
   onSettingsClick,
+  user,
+  profile,
+  role,
+  onLogout,
 }) => {
-  const isConnected = isSupabaseConfigured();
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
+  const initials = profile?.avatar_initials || displayName.slice(0, 2).toUpperCase();
+  const roleLabel = role === "member" ? "Member" : "Admin";
 
   return (
     <header className="top-header">
-      {/* =========================
-          LEFT SIDE
-      ========================= */}
       <div className="header-left">
-        {/* Mobile Menu */}
         <button className="mobile-menu-btn" onClick={onMenuClick}>
           <Menu size={22} />
         </button>
@@ -33,64 +34,63 @@ const Navbar = ({
         </div>
       </div>
 
-      {/* =========================
-          SEARCH
-      ========================= */}
       <div className="search-box">
         <Search size={19} />
-        <input
-          type="text"
-          placeholder="Search members, schemes, payments, bids..."
-        />
+        <input type="text" placeholder="Search members, schemes, payments, bids..." />
       </div>
 
-      {/* =========================
-          RIGHT SIDE
-      ========================= */}
       <div className="header-right">
-        {/* Supabase Connection Indicator */}
         <div
-          className={`conn-badge ${isConnected ? "live" : "demo"}`}
+          className="conn-badge live"
           onClick={onSettingsClick}
-          title={
-            isConnected
-              ? "Supabase Live Connection Active"
-              : "Running in Demo Mode (Seed Data) - Click to configure"
-          }
+          title="Supabase Live Database Connected"
         >
           <span className="conn-dot"></span>
-          <span>{isConnected ? "Supabase Live" : "Demo Mode"}</span>
+          <span>Supabase Live</span>
         </div>
 
-        {/* Notifications */}
         <button className="header-icon notification-btn" title="Recent Alerts">
           <Bell size={19} />
           <span className="notification-dot"></span>
         </button>
 
-        {/* Settings */}
-        <button
-          className="header-icon"
-          title="App & Database Settings"
-          onClick={onSettingsClick}
-        >
+        <button className="header-icon" title="App & Database Settings" onClick={onSettingsClick}>
           <Settings size={19} />
         </button>
 
-        {/* Divider */}
         <div className="header-divider"></div>
 
-        {/* Admin Profile */}
-        <div className="header-user" onClick={onSettingsClick}>
-          <div className="header-user-avatar">R</div>
+        {user ? (
+          <div className="header-user" onClick={onSettingsClick}>
+            <div className="header-user-avatar">{initials}</div>
 
-          <div className="header-user-info">
-            <strong>Rahul Sharma</strong>
-            <span>Super Admin</span>
+            <div className="header-user-info">
+              <strong>{displayName}</strong>
+              <span>{roleLabel}</span>
+            </div>
+
+            <div className="header-user-actions">
+              <ChevronDown size={17} />
+              {onLogout && (
+                <button
+                  type="button"
+                  className="logout-inline-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onLogout();
+                  }}
+                  title="Logout"
+                >
+                  <LogOut size={16} />
+                </button>
+              )}
+            </div>
           </div>
-
-          <ChevronDown size={17} />
-        </div>
+        ) : (
+          <button className="primary-button" type="button" onClick={onSettingsClick}>
+            Login
+          </button>
+        )}
       </div>
     </header>
   );

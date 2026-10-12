@@ -12,12 +12,11 @@ import {
 import {
   supabase,
   isSupabaseConfigured,
-  SEED_PAYMENTS,
 } from "../lib/supabase";
 
 const Payments = () => {
-  const [payments, setPayments] = useState(SEED_PAYMENTS);
-  const [loading] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -38,20 +37,20 @@ const Payments = () => {
   // Real-time synchronization
   useEffect(() => {
     const fetchPayments = async () => {
-      if (isSupabaseConfigured()) {
-        try {
-          const { data, error } = await supabase
-            .from("payments")
-            .select("*")
-            .order("created_at", { ascending: false });
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("payments")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-          if (error) throw error;
-          if (data && data.length > 0) {
-            setPayments(data);
-          }
-        } catch (err) {
-          console.warn("Supabase fetch payments failed, using seed data:", err.message);
-        }
+        if (error) throw error;
+        setPayments(data || []);
+      } catch (err) {
+        console.warn("Supabase fetch payments failed:", err.message);
+        setPayments([]);
+      } finally {
+        setLoading(false);
       }
     };
 

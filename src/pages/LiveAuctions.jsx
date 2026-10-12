@@ -12,6 +12,7 @@ import {
   isSupabaseConfigured,
   SEED_AUCTIONS,
 } from "../lib/supabase";
+import { useAuth } from "../context/useAuth";
 
 const LiveAuctions = () => {
   const [auctions, setAuctions] = useState(SEED_AUCTIONS);
@@ -44,7 +45,11 @@ const LiveAuctions = () => {
       time: "45 mins ago",
     },
   ]);
-  const [bidderName] = useState("Rahul Sharma (You)");
+  const { profile, user } = useAuth();
+  const currentUserName =
+    profile?.full_name ||
+    (user?.email ? user.email.split("@")[0] : "Participant");
+  const bidderName = `${currentUserName} (You)`;
   const [bidAmountInput, setBidAmountInput] = useState("");
   const [bidding, setBidding] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
