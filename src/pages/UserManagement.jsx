@@ -10,6 +10,10 @@ import {
   CheckCircle,
   Mail,
   Phone,
+  ShieldCheck,
+  ShieldAlert,
+  Eye,
+  FileText,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -19,6 +23,7 @@ const UserManagement = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKycFilter, setSelectedKycFilter] = useState("All");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedKycMember, setSelectedKycMember] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
@@ -399,6 +404,22 @@ const UserManagement = () => {
 
                     <td style={{ textAlign: "right", paddingRight: "24px" }}>
                       <div style={{ display: "inline-flex", gap: "6px" }}>
+                        <button
+                          className="btn-sm-action"
+                          style={{
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            border: "1px solid #bfdbfe",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                          title="Inspect and Review KYC Documents"
+                          onClick={() => setSelectedKycMember(member)}
+                        >
+                          <Eye size={12} /> Review
+                        </button>
+
                         {member.kyc_status !== "Approved" && (
                           <button
                             className="btn-sm-action btn-sm-approve"
@@ -545,6 +566,200 @@ const UserManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* KYC INSPECTION & REVIEW MODAL */}
+      {selectedKycMember && (
+        <div className="modal-backdrop" onClick={() => setSelectedKycMember(null)}>
+          <div
+            className="modal-box"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "580px", width: "100%", borderRadius: "16px", padding: 0 }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid #e2e8f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ background: "#eff6ff", color: "#1d4ed8", padding: "8px", borderRadius: "10px" }}>
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", color: "#0f172a" }}>
+                    KYC Verification & Approval
+                  </h3>
+                  <small style={{ color: "#64748b" }}>Foreman regulatory review panel</small>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setSelectedKycMember(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "24px" }}>
+              {/* Member Summary Header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px",
+                  padding: "16px",
+                  background: "#f1f5f9",
+                  borderRadius: "12px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    background: "#0f192d",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "700",
+                    fontSize: "16px",
+                  }}
+                >
+                  {selectedKycMember.avatar_initials ||
+                    (selectedKycMember.full_name ? selectedKycMember.full_name.slice(0, 2).toUpperCase() : "M")}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: "0 0 2px 0", fontSize: "16px", color: "#0f172a" }}>
+                    {selectedKycMember.full_name}
+                  </h4>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>
+                    {selectedKycMember.email} • {selectedKycMember.phone || "No phone"}
+                  </div>
+                </div>
+                <div>
+                  <span className={`status-badge ${(selectedKycMember.kyc_status || "pending").toLowerCase()}`}>
+                    {selectedKycMember.kyc_status || "Pending"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Submitted Details Card */}
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  padding: "18px",
+                  fontSize: "13px",
+                  marginBottom: "20px",
+                }}
+              >
+                <h5 style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#334155", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Submitted Identity & Address Proofs
+                </h5>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", display: "block" }}>Document Type:</span>
+                    <strong>PAN Card & Aadhaar Verification</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", display: "block" }}>Statutory Act:</span>
+                    <strong style={{ color: "#166534" }}>The Chit Funds Act, 1982</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", display: "block" }}>Total Invested:</span>
+                    <strong>₹{Number(selectedKycMember.total_invested || 0).toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", display: "block" }}>Chits Enrolled:</span>
+                    <strong>{selectedKycMember.chits_enrolled || 1} Scheme(s)</strong>
+                  </div>
+                </div>
+
+                <div style={{ paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
+                  <span style={{ color: "#64748b", fontSize: "11px", display: "block", marginBottom: "4px" }}>
+                    Address & Identification Record:
+                  </span>
+                  <div
+                    style={{
+                      background: "#f8fafc",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      color: "#1e293b",
+                      lineHeight: "1.5",
+                      fontFamily: "monospace",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {selectedKycMember.address || "Address and ID details recorded upon registration."}
+                  </div>
+                </div>
+              </div>
+
+              {/* Approval Buttons */}
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSelectedKycMember(null)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: "#ef4444",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "10px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    handleUpdateKyc(selectedKycMember.id, "Rejected");
+                    setSelectedKycMember((prev) => ({ ...prev, kyc_status: "Rejected" }));
+                  }}
+                >
+                  Reject KYC
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: "#16a34a",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                  onClick={() => {
+                    handleUpdateKyc(selectedKycMember.id, "Approved");
+                    setSelectedKycMember((prev) => ({ ...prev, kyc_status: "Approved" }));
+                  }}
+                >
+                  <ShieldCheck size={16} /> Approve & Authorize Member
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

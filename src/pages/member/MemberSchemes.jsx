@@ -68,8 +68,24 @@ const MemberSchemes = ({ onNavigate }) => {
 
   // Handle member enrolling in a new scheme
   const handleEnroll = async (scheme) => {
-    if (!memberId) {
-      alert("Member account details are loading. Please try again.");
+    let effectiveMemberId = memberId;
+
+    // Fallback: if memberId is not yet in profile state, try looking it up by email
+    if (!effectiveMemberId && profile?.email) {
+      try {
+        const { data: mData } = await supabase
+          .from("members")
+          .select("id")
+          .ilike("email", profile.email)
+          .maybeSingle();
+        if (mData?.id) {
+          effectiveMemberId = mData.id;
+        }
+      } catch (_) {}
+    }
+
+    if (!effectiveMemberId) {
+      alert("Member account profile is still initializing. Please refresh the page and try again.");
       return;
     }
 
@@ -80,12 +96,21 @@ const MemberSchemes = ({ onNavigate }) => {
         .from("scheme_enrollments")
         .insert([
           {
-            member_id: memberId,
+            member_id: effectiveMemberId,
             scheme_id: scheme.id,
           },
         ]);
 
       if (enrollError) {
+        if (
+          enrollError.code === "PGRST205" ||
+          enrollError.message?.includes("scheme_enrollments")
+        ) {
+          alert(
+            "Database Setup Required:\nThe 'scheme_enrollments' table has not been created yet in your Supabase database.\n\nPlease open your Supabase SQL Editor and run the 'supabase_auth.sql' script to enable scheme enrollments!"
+          );
+          return;
+        }
         console.warn("Enrollment insert note:", enrollError.message);
       }
 
@@ -99,7 +124,7 @@ const MemberSchemes = ({ onNavigate }) => {
       await supabase
         .from("members")
         .update({ chits_enrolled: (profile?.members?.chits_enrolled || 0) + 1 })
-        .eq("id", memberId);
+        .eq("id", effectiveMemberId);
 
       setSuccessMsg(`Successfully enrolled in ${scheme.name}! You can now pay installments.`);
       setTimeout(() => setSuccessMsg(""), 5000);

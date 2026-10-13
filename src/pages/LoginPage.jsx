@@ -43,9 +43,13 @@ const LoginPage = () => {
     } catch (loginError) {
       const msg = loginError?.message || "Unable to sign in. Please verify your credentials.";
       if (msg.toLowerCase().includes("email not confirmed")) {
-        setError("Your email has not been confirmed yet. Please check your inbox for the confirmation link, or disable 'Confirm email' in Supabase Authentication settings.");
+        setError(
+          "Your email has not been confirmed yet. To allow instant login: in Supabase Dashboard → Authentication → Providers → Email, turn OFF 'Confirm email', or run 'UPDATE auth.users SET email_confirmed_at = now();' in the SQL Editor."
+        );
       } else if (msg.toLowerCase().includes("invalid login credentials")) {
-        setError("Invalid email or password. Please verify your credentials or register a new member account.");
+        setError(
+          "Invalid email or password. Note: If you only added a record directly into the database, you must first create your login account under the 'Register as Member' tab."
+        );
       } else {
         setError(msg);
       }

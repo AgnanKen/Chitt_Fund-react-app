@@ -10,6 +10,9 @@ import {
   Gavel,
   CreditCard,
   Sparkles,
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { supabase } from "../../lib/supabase";
@@ -167,6 +170,125 @@ const MemberDashboard = ({ onNavigate }) => {
           </button>
         </div>
       </section>
+
+      {/* KYC Verification Status Banner */}
+      {(() => {
+        const kycStatus = profile?.members?.kyc_status || "Pending";
+        if (kycStatus === "Approved") {
+          return (
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "14px",
+                padding: "12px 18px",
+                marginBottom: "20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <ShieldCheck size={18} color="#16a34a" />
+                <span style={{ fontSize: "13px", color: "#166534", fontWeight: "600" }}>
+                  KYC Verified Member — Full Live Bidding & Payout Authorization Active
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate?.("KYC Verification")}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#15803d",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                View KYC Details
+              </button>
+            </div>
+          );
+        } else if (kycStatus === "Rejected") {
+          return (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "14px",
+                padding: "14px 18px",
+                marginBottom: "20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <ShieldAlert size={20} color="#dc2626" />
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#991b1b", display: "block" }}>
+                    KYC Verification Rejected by Foreman
+                  </strong>
+                  <span style={{ fontSize: "12px", color: "#b91c1c" }}>
+                    Please re-submit your PAN and Aadhaar identity documents to enable live auction bidding.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="primary-button"
+                style={{ padding: "6px 14px", fontSize: "12px", background: "#dc2626" }}
+                onClick={() => onNavigate?.("KYC Verification")}
+              >
+                Re-submit KYC
+              </button>
+            </div>
+          );
+        } else {
+          return (
+            <div
+              style={{
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: "14px",
+                padding: "14px 18px",
+                marginBottom: "20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <Clock size={20} color="#d97706" />
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#92400e", display: "block" }}>
+                    KYC Verification In Progress / Required
+                  </strong>
+                  <span style={{ fontSize: "12px", color: "#b45309" }}>
+                    Complete your identity verification under the Chit Funds Act, 1982 to unlock live auction bidding.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ padding: "6px 14px", fontSize: "12px", border: "1px solid #d97706", color: "#92400e" }}
+                onClick={() => onNavigate?.("KYC Verification")}
+              >
+                Complete KYC
+              </button>
+            </div>
+          );
+        }
+      })()}
 
       {/* Zero State Call to Action Banner if new user */}
       {enrolledSchemes.length === 0 && !loading && (

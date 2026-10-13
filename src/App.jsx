@@ -18,13 +18,20 @@ import LoginPage from "./pages/LoginPage";
 import MemberDashboard from "./pages/member/MemberDashboard";
 import MemberPayments from "./pages/member/MemberPayments";
 import MemberSchemes from "./pages/member/MemberSchemes";
+import MemberKyc from "./pages/member/MemberKyc";
 
 function App() {
   const { user, role, profile, loading, signOut } = useAuth();
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const memberMenuItems = ["Dashboard", "My Schemes", "My Payments", "Live Auctions"];
+  const memberMenuItems = [
+    "Dashboard",
+    "My Schemes",
+    "My Payments",
+    "Live Auctions",
+    "KYC Verification",
+  ];
   const safeActiveMenu = role === "member" && !memberMenuItems.includes(activeMenu) ? "Dashboard" : activeMenu;
 
   const adminPageMeta = {
@@ -42,6 +49,7 @@ function App() {
     "My Schemes": { title: "My Schemes", subtitle: "Your active chit enrollments and schedule" },
     "My Payments": { title: "My Payments", subtitle: "Your payment history and receipts" },
     "Live Auctions": { title: "Live Auctions", subtitle: "Bid participation and auction updates" },
+    "KYC Verification": { title: "KYC Verification", subtitle: "Identity verification and regulatory compliance documents" },
   };
 
   const currentMeta = role === "member" ? memberPageMeta[safeActiveMenu] || memberPageMeta.Dashboard : adminPageMeta[safeActiveMenu] || adminPageMeta.Dashboard;
@@ -74,7 +82,9 @@ function App() {
       case "My Payments":
         return <MemberPayments onNavigate={(menu) => setActiveMenu(menu)} />;
       case "Live Auctions":
-        return <LiveAuctions />;
+        return <LiveAuctions onNavigate={(menu) => setActiveMenu(menu)} />;
+      case "KYC Verification":
+        return <MemberKyc onNavigate={(menu) => setActiveMenu(menu)} />;
       case "Dashboard":
       default:
         return <MemberDashboard onNavigate={(menu) => setActiveMenu(menu)} />;

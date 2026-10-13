@@ -14,7 +14,7 @@ import {
 } from "../lib/supabase";
 import { useAuth } from "../context/useAuth";
 
-const LiveAuctions = () => {
+const LiveAuctions = ({ onNavigate }) => {
   const [auctions, setAuctions] = useState(SEED_AUCTIONS);
   const [selectedAuctionId, setSelectedAuctionId] = useState(
     SEED_AUCTIONS[0].id
@@ -45,7 +45,7 @@ const LiveAuctions = () => {
       time: "45 mins ago",
     },
   ]);
-  const { profile, user } = useAuth();
+  const { profile, user, role } = useAuth();
   const currentUserName =
     profile?.full_name ||
     (user?.email ? user.email.split("@")[0] : "Participant");
@@ -171,6 +171,15 @@ const LiveAuctions = () => {
 
   // Place Bid Handler
   const handlePlaceBid = async (amountToBid) => {
+    const kycStatus = profile?.members?.kyc_status || "Pending";
+    if (role === "member" && kycStatus !== "Approved") {
+      alert(
+        "KYC Verification Required:\nUnder statutory rules (The Chit Funds Act, 1982), only KYC-approved members are authorized to participate in live auction bidding.\n\nPlease submit or verify your documents under the 'KYC Verification' menu."
+      );
+      onNavigate?.("KYC Verification");
+      return;
+    }
+
     const numAmount = Number(amountToBid);
     if (!numAmount || numAmount <= currentHighestBid) {
       alert(

@@ -9,6 +9,7 @@ import {
   LogOut,
   CircleDollarSign,
   X,
+  ShieldCheck,
 } from "lucide-react";
 
 const Sidebar = ({
@@ -27,6 +28,7 @@ const Sidebar = ({
           { name: "My Schemes", icon: <Layers3 size={19} /> },
           { name: "My Payments", icon: <CreditCard size={19} /> },
           { name: "Live Auctions", icon: <Gavel size={19} /> },
+          { name: "KYC Verification", icon: <ShieldCheck size={19} /> },
         ]
       : [
           { name: "Dashboard", icon: <LayoutDashboard size={19} /> },

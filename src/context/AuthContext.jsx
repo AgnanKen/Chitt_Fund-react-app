@@ -23,18 +23,96 @@ export default function AuthProvider({ children }) {
 
       let profileRow = fallbackProfile;
 
-      if (!profileRow && isSupabaseConfigured()) {
+      if (isSupabaseConfigured()) {
         try {
-          const { data: fetchedProfile } = await supabase
-            .from("profiles")
-            .select("*, members(*)")
-            .eq("id", sessionUser.id)
-            .maybeSingle();
-          if (fetchedProfile) {
-            profileRow = fetchedProfile;
+          if (!profileRow) {
+            const { data: fetchedProfile } = await supabase
+              .from("profiles")
+              .select("*, members(*)")
+              .eq("id", sessionUser.id)
+              .maybeSingle();
+            if (fetchedProfile && fetchedProfile.member_id) {
+              profileRow = fetchedProfile;
+            }
+          }
+
+          // If still no member_id linked, check members table by email or auto-create one!
+          if (!profileRow?.member_id) {
+            let memberRow = profileRow?.members;
+            if (!memberRow) {
+              const { data: existingMember } = await supabase
+                .from("members")
+                .select("*")
+                .ilike("email", sessionUser.email)
+                .maybeSingle();
+              memberRow = existingMember;
+            }
+
+            // Auto-create member record if not yet existing in members table
+            if (!memberRow) {
+              const cleanFullName =
+                sessionUser.user_metadata?.full_name ||
+                sessionUser.email?.split("@")[0] ||
+                "Member";
+              const cleanPhone = sessionUser.user_metadata?.phone || "";
+              const initials =
+                cleanFullName
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase() || "M";
+
+              const { data: createdMember, error: insertErr } = await supabase
+                .from("members")
+                .insert([
+                  {
+                    full_name: cleanFullName,
+                    email: sessionUser.email,
+                    phone: cleanPhone,
+                    kyc_status: "Approved",
+                    role: "Member",
+                    avatar_initials: initials,
+                    total_invested: 0,
+                    chits_enrolled: 0,
+                  },
+                ])
+                .select()
+                .maybeSingle();
+
+              if (!insertErr && createdMember) {
+                memberRow = createdMember;
+              }
+            }
+
+            if (memberRow) {
+              profileRow = {
+                id: sessionUser.id,
+                email: sessionUser.email,
+                full_name: memberRow.full_name || sessionUser.user_metadata?.full_name || "Member",
+                role: (memberRow.role || sessionUser.user_metadata?.role || "member").toLowerCase(),
+                avatar_initials: memberRow.avatar_initials || "M",
+                member_id: memberRow.id,
+                members: memberRow,
+              };
+
+              // Sync with profiles table if it exists
+              try {
+                await supabase.from("profiles").upsert({
+                  id: sessionUser.id,
+                  email: sessionUser.email,
+                  full_name: profileRow.full_name,
+                  role: profileRow.role,
+                  avatar_initials: profileRow.avatar_initials,
+                  member_id: memberRow.id,
+                });
+              } catch (_) {
+                // Table might not exist yet if supabase_auth.sql has not been run
+              }
+            }
           }
         } catch (fetchErr) {
-          console.warn("Unable to fetch profiles from Supabase:", fetchErr);
+          console.warn("Unable to fetch/link profiles from Supabase:", fetchErr);
         }
       }
 
