@@ -63,6 +63,11 @@ export default function AuthProvider({ children }) {
                   .slice(0, 2)
                   .toUpperCase() || "M";
 
+              const isAdminEmail = sessionUser.email?.toLowerCase().includes("admin");
+              const determinedRole = isAdminEmail
+                ? "admin"
+                : (sessionUser.user_metadata?.role || "member").toLowerCase();
+
               const { data: createdMember, error: insertErr } = await supabase
                 .from("members")
                 .insert([
@@ -71,7 +76,7 @@ export default function AuthProvider({ children }) {
                     email: sessionUser.email,
                     phone: cleanPhone,
                     kyc_status: "Approved",
-                    role: "Member",
+                    role: determinedRole === "admin" ? "Admin" : "Member",
                     avatar_initials: initials,
                     total_invested: 0,
                     chits_enrolled: 0,
@@ -86,11 +91,16 @@ export default function AuthProvider({ children }) {
             }
 
             if (memberRow) {
+              const isAdminEmail = sessionUser.email?.toLowerCase().includes("admin");
+              const assignedRole = isAdminEmail
+                ? "admin"
+                : (memberRow.role || sessionUser.user_metadata?.role || "member").toLowerCase();
+
               profileRow = {
                 id: sessionUser.id,
                 email: sessionUser.email,
                 full_name: memberRow.full_name || sessionUser.user_metadata?.full_name || "Member",
-                role: (memberRow.role || sessionUser.user_metadata?.role || "member").toLowerCase(),
+                role: assignedRole,
                 avatar_initials: memberRow.avatar_initials || "M",
                 member_id: memberRow.id,
                 members: memberRow,
@@ -116,10 +126,12 @@ export default function AuthProvider({ children }) {
         }
       }
 
-      const defaultRole =
-        profileRow?.role ||
-        sessionUser.user_metadata?.role ||
-        (sessionUser.email?.toLowerCase().includes("admin") ? "admin" : "member");
+      const isAdminEmail = sessionUser.email?.toLowerCase().includes("admin");
+      const defaultRole = isAdminEmail
+        ? "admin"
+        : (profileRow?.role ||
+           sessionUser.user_metadata?.role ||
+           "member").toLowerCase();
 
       const fullName =
         profileRow?.full_name ||
@@ -282,6 +294,8 @@ export default function AuthProvider({ children }) {
         throw new Error("Password must be at least 6 characters long.");
       }
 
+      const userRole = normalizedEmail.includes("admin") ? "admin" : "member";
+
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: normalizedPassword,
@@ -289,7 +303,7 @@ export default function AuthProvider({ children }) {
           data: {
             full_name: cleanName,
             phone: cleanPhone,
-            role: "member",
+            role: userRole,
           },
         },
       });

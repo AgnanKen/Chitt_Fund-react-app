@@ -13,9 +13,11 @@ import {
   ShieldCheck,
   ShieldAlert,
   Clock,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { supabase } from "../../lib/supabase";
+import { getAdjustedInstallmentDetails } from "../../lib/chitCalculations";
 
 const MemberDashboard = ({ onNavigate }) => {
   const { profile } = useAuth();
@@ -95,9 +97,15 @@ const MemberDashboard = ({ onNavigate }) => {
   const latestPayment = memberPayments[0] || null;
 
   const nextDueScheme = enrolledSchemes[0] || null;
-  const nextDueText = nextDueScheme
-    ? `₹${Number(nextDueScheme.monthly_installment || 0).toLocaleString("en-IN")}`
+  const nextDueAdj = nextDueScheme ? getAdjustedInstallmentDetails(nextDueScheme) : null;
+  const nextDueText = nextDueAdj
+    ? `₹${Number(nextDueAdj.netAdjustedInstallment || 0).toLocaleString("en-IN")}`
     : "None";
+
+  // Check for pending winner prize disbursements
+  const pendingDisbursements = memberPayments.filter(
+    (p) => p.payment_type === "Payout" || p.payment_type === "Prize Disbursement"
+  );
 
   const summaryCards = [
     {
@@ -125,13 +133,79 @@ const MemberDashboard = ({ onNavigate }) => {
       label: "Next installment",
       value: nextDueText,
       icon: <CalendarClock size={18} />,
-      detail: nextDueScheme ? `${nextDueScheme.name} due next` : "No upcoming dues",
+      detail:
+        nextDueAdj && nextDueAdj.isAdjusted
+          ? `Adjusted (-₹${nextDueAdj.dividendCredit.toLocaleString("en-IN")} dividend)`
+          : nextDueScheme
+          ? `${nextDueScheme.name} due next`
+          : "No upcoming dues",
       onClick: () => onNavigate?.("My Schemes"),
     },
   ];
 
   return (
     <div className="member-dashboard">
+      {/* WINNER PRIZE DISBURSEMENT PENDING BANNER */}
+      {pendingDisbursements.length > 0 && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+            border: "1px solid #fde68a",
+            borderRadius: "14px",
+            padding: "16px 20px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "42px",
+                height: "42px",
+                borderRadius: "10px",
+                background: "#fef3c7",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "22px",
+              }}
+            >
+              🏆
+            </div>
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: "#92400e", textTransform: "uppercase" }}>
+                Auction Prize Winning Notification
+              </div>
+              <strong style={{ fontSize: "16px", color: "#78350f" }}>
+                Prize Payout: ₹{Number(pendingDisbursements[0].amount).toLocaleString("en-IN")} ({pendingDisbursements[0].scheme_name})
+              </strong>
+              <div style={{ fontSize: "12px", color: "#b45309", marginTop: "2px" }}>
+                Winner disbursement is marked <strong>PENDING</strong> while the Foreman verifies statutory suretyship/guarantees under Section 16.
+              </div>
+            </div>
+          </div>
+
+          <span
+            style={{
+              background: "#fef3c7",
+              color: "#b45309",
+              border: "1px solid #fde68a",
+              padding: "6px 14px",
+              borderRadius: "20px",
+              fontSize: "12px",
+              fontWeight: "800",
+              letterSpacing: "0.5px",
+            }}
+          >
+            DISBURSEMENT PENDING
+          </span>
+        </div>
+      )}
+
       <section className="member-hero">
         <div>
           <p className="eyebrow subtle">Member Portal</p>

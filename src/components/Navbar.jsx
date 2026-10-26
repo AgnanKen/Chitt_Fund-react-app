@@ -1,31 +1,64 @@
-
+import { useState, useEffect } from "react";
 import {
   Bell,
   Settings,
-  Search,
   ChevronDown,
   Menu,
   LogOut,
+  Sliders,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
+import SearchBar from "./SearchBar";
+import NotificationCenter from "./NotificationCenter";
+import { isSupabaseConfigured } from "../lib/supabase";
+
 const Navbar = ({
   title = "Dashboard",
   subtitle = "Welcome back, Admin",
   onMenuClick,
+  sidebarHidden = false,
   onSettingsClick,
+  onNavigate,
   user,
   profile,
-  role,
+  role = "admin",
   onLogout,
 }) => {
+  const [notifOpen, setNotifOpen] = useState(false);
+  const isConnected = isSupabaseConfigured();
+
+  // Read unread notification count from localStorage if available
+  const [unreadCount, setUnreadCount] = useState(3);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ledgerone_notifications");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setUnreadCount(parsed.filter((n) => !n.read).length);
+      }
+    } catch {
+      // ignore
+    }
+  }, [notifOpen]);
+
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
   const initials = profile?.avatar_initials || displayName.slice(0, 2).toUpperCase();
-  const roleLabel = role === "member" ? "Member" : "Admin";
+  const roleLabel = role === "member" ? "Member" : "Super Admin";
 
   return (
     <header className="top-header">
+      {/* Left side: 3 lines hamburger button and page title */}
       <div className="header-left">
-        <button className="mobile-menu-btn" onClick={onMenuClick}>
-          <Menu size={22} />
+        <button
+          type="button"
+          className={`mobile-menu-btn menu-toggle-btn ${sidebarHidden ? "sidebar-is-hidden" : ""}`}
+          onClick={onMenuClick}
+          title={sidebarHidden ? "Show Left Navigation Bar" : "Hide Left Navigation Bar"}
+          aria-label={sidebarHidden ? "Show left navigation sidebar" : "Hide left navigation sidebar"}
+        >
+          <Menu size={22} className="menu-icon-svg" />
         </button>
 
         <div className="page-heading">
@@ -34,34 +67,64 @@ const Navbar = ({
         </div>
       </div>
 
-      <div className="search-box">
-        <Search size={19} />
-        <input type="text" placeholder="Search members, schemes, payments, bids..." />
-      </div>
+      {/* Center: Live Search Bar */}
+      <SearchBar onNavigate={onNavigate} role={role} />
 
+      {/* Right side: Database Badge, Notification Center, Settings Bar, User Info */}
       <div className="header-right">
+        {/* Supabase status badge: clicking opens Settings Drawer */}
         <div
-          className="conn-badge live"
+          className={`conn-badge ${isConnected ? "live" : "demo"}`}
           onClick={onSettingsClick}
-          title="Supabase Live Database Connected"
+          title={isConnected ? "Supabase Live Database Connected (Click to view)" : "Running in Demo Mode (Click to configure)"}
+          style={{ cursor: "pointer" }}
         >
           <span className="conn-dot"></span>
-          <span>Supabase Live</span>
+          <span>{isConnected ? "Supabase Live" : "Demo Mode"}</span>
         </div>
 
-        <button className="header-icon notification-btn" title="Recent Alerts">
-          <Bell size={19} />
-          <span className="notification-dot"></span>
-        </button>
+        {/* Notifications Button */}
+        <div className="notif-wrapper">
+          <button
+            type="button"
+            className={`header-icon notification-btn ${notifOpen ? "active" : ""}`}
+            title="Recent Alerts & Updates"
+            onClick={() => setNotifOpen((prev) => !prev)}
+            aria-label="View notifications"
+          >
+            <Bell size={19} />
+            {unreadCount > 0 && <span className="notification-dot" />}
+          </button>
 
-        <button className="header-icon" title="App & Database Settings" onClick={onSettingsClick}>
+          {/* Interactive Notifications Popover */}
+          <NotificationCenter
+            isOpen={notifOpen}
+            onClose={() => setNotifOpen(false)}
+            onNavigate={onNavigate}
+          />
+        </div>
+
+        {/* Settings Bar trigger button */}
+        <button
+          type="button"
+          className="header-icon settings-btn"
+          title="Open Settings Bar"
+          onClick={onSettingsClick}
+          aria-label="Open Settings Bar"
+        >
           <Settings size={19} />
         </button>
 
         <div className="header-divider"></div>
 
+        {/* User Card */}
         {user ? (
-          <div className="header-user" onClick={onSettingsClick}>
+          <div
+            className="header-user"
+            onClick={onSettingsClick}
+            title="Open Account & Settings"
+            style={{ cursor: "pointer" }}
+          >
             <div className="header-user-avatar">{initials}</div>
 
             <div className="header-user-info">
@@ -79,7 +142,7 @@ const Navbar = ({
                     event.stopPropagation();
                     onLogout();
                   }}
-                  title="Logout"
+                  title="Sign Out"
                 >
                   <LogOut size={16} />
                 </button>

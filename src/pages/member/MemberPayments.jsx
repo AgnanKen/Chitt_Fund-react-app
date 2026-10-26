@@ -18,9 +18,14 @@ import {
   Smartphone,
   Building2,
   Lock,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { supabase } from "../../lib/supabase";
+import {
+  getAdjustedInstallmentDetails,
+  getAllSettlements,
+} from "../../lib/chitCalculations";
 
 const MemberPayments = ({ onNavigate }) => {
   const { profile } = useAuth();
@@ -38,6 +43,16 @@ const MemberPayments = ({ onNavigate }) => {
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const handleSettlementUpdate = () => {
+      setRefreshTrigger((prev) => prev + 1);
+    };
+    window.addEventListener("ledgerone:settlement_updated", handleSettlementUpdate);
+    return () => {
+      window.removeEventListener("ledgerone:settlement_updated", handleSettlementUpdate);
+    };
+  }, []);
 
   // Gateway form and options
   const [selectedScheme, setSelectedScheme] = useState(null);
@@ -211,11 +226,14 @@ const MemberPayments = ({ onNavigate }) => {
       setTimeout(() => setToastMsg(null), 5000);
 
       // Close gateway and show the Official Bill immediately!
+      const adj = getAdjustedInstallmentDetails(selectedScheme);
       setIsGatewayOpen(false);
       setSelectedBill({
         ...createdPayment,
         scheme: selectedScheme,
-        original_installment: selectedScheme.monthly_installment,
+        original_installment: adj.grossInstallment,
+        adjusted_installment: adj.netAdjustedInstallment,
+        dividend_credit: adj.dividendCredit,
         is_test_mode: true,
       });
 
@@ -234,7 +252,8 @@ const MemberPayments = ({ onNavigate }) => {
     if (!manualUtr || !selectedScheme) return;
 
     setSubmittingPayment(true);
-    const numAmount = Number(selectedScheme.monthly_installment || 1);
+    const adj = getAdjustedInstallmentDetails(selectedScheme);
+    const numAmount = Number(adj.netAdjustedInstallment || 1);
 
     const newRecord = {
       member_id: memberId,
@@ -267,7 +286,9 @@ const MemberPayments = ({ onNavigate }) => {
       setSelectedBill({
         ...created,
         scheme: selectedScheme,
-        original_installment: numAmount,
+        original_installment: adj.grossInstallment,
+        adjusted_installment: adj.netAdjustedInstallment,
+        dividend_credit: adj.dividendCredit,
       });
       setRefreshTrigger((prev) => prev + 1);
     } catch (err) {
@@ -385,6 +406,74 @@ Foreman Auth   : LedgerOne Digital Signature (Valid)
           <PlusCircle size={18} /> Make Payment
         </button>
       </div>
+
+      {/* PENDING WINNER PRIZE DISBURSEMENT BANNER */}
+      {(() => {
+        const pendingDisbursements = payments.filter(
+          (p) => p.payment_type === "Payout" || p.payment_type === "Prize Disbursement"
+        );
+        if (pendingDisbursements.length === 0) return null;
+        const disb = pendingDisbursements[0];
+        return (
+          <div
+            style={{
+              background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+              border: "1px solid #fde68a",
+              borderRadius: "14px",
+              padding: "16px 20px",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "10px",
+                  background: "#fef3c7",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "22px",
+                }}
+              >
+                🏆
+              </div>
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "#92400e", textTransform: "uppercase" }}>
+                  Auction Prize Winning Notification
+                </div>
+                <strong style={{ fontSize: "16px", color: "#78350f" }}>
+                  Winner Prize Payout: ₹{Number(disb.amount).toLocaleString("en-IN")} ({disb.scheme_name})
+                </strong>
+                <div style={{ fontSize: "12px", color: "#b45309", marginTop: "2px" }}>
+                  Winner disbursement is marked <strong>PENDING</strong> awaiting foreman statutory surety verification under Section 16.
+                </div>
+              </div>
+            </div>
+
+            <span
+              style={{
+                background: "#fef3c7",
+                color: "#b45309",
+                border: "1px solid #fde68a",
+                padding: "6px 14px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: "800",
+                letterSpacing: "0.5px",
+              }}
+            >
+              DISBURSEMENT PENDING
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Stats summary */}
       <div className="member-stat-grid" style={{ marginBottom: "24px" }}>
@@ -512,20 +601,39 @@ Foreman Auth   : LedgerOne Digital Signature (Valid)
                     {payment.reference_id || String(payment.id).slice(0, 10)}
                   </td>
                   <td style={{ padding: "14px 18px", fontWeight: "600", color: "#0f172a" }}>
-                    {payment.scheme_name || "Chit Scheme"}
+                    <div>{payment.scheme_name || "Chit Scheme"}</div>
+                    {payment.payment_type === "Payout" && (
+                      <span style={{ fontSize: "11px", color: "#b45309", fontWeight: "700" }}>
+                        🏆 Winner Prize Payout
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: "14px 18px", color: "#475569", fontSize: "13px" }}>
-                    {payment.payment_method || "UPI"}
+                    {payment.payment_method || "Bank Transfer"}
                   </td>
                   <td style={{ padding: "14px 18px", color: "#64748b", fontSize: "13px" }}>
                     {payment.created_at ? new Date(payment.created_at).toLocaleDateString("en-IN") : "Recent"}
                   </td>
-                  <td style={{ padding: "14px 18px", fontWeight: "700", color: "#0f172a" }}>
-                    ₹{Number(payment.amount).toLocaleString("en-IN")}
+                  <td
+                    style={{
+                      padding: "14px 18px",
+                      fontWeight: "700",
+                      color: payment.payment_type === "Payout" ? "#059669" : "#0f172a",
+                    }}
+                  >
+                    {payment.payment_type === "Payout" ? "+" : ""}₹{Number(payment.amount).toLocaleString("en-IN")}
                   </td>
                   <td style={{ padding: "14px 18px" }}>
-                    <span className={`status-tag ${String(payment.status).toLowerCase()}`}>
-                      {payment.status}
+                    <span
+                      className={`status-tag ${
+                        payment.payment_type === "Payout" && payment.status === "Pending"
+                          ? "pending"
+                          : String(payment.status).toLowerCase()
+                      }`}
+                    >
+                      {payment.payment_type === "Payout" && payment.status === "Pending"
+                        ? "Disbursement Pending"
+                        : payment.status}
                     </span>
                   </td>
                   <td style={{ padding: "14px 18px", textAlign: "right" }}>
@@ -685,31 +793,48 @@ Foreman Auth   : LedgerOne Digital Signature (Valid)
                 </div>
 
                 {/* Enrolled Scheme Details Card */}
-                {selectedScheme && (
-                  <div
-                    style={{
-                      background: "#f8faff",
-                      border: "1px solid #dbeafe",
-                      borderRadius: "12px",
-                      padding: "14px 16px",
-                      marginBottom: "18px",
-                      fontSize: "13px",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ color: "#64748b" }}>Scheme Tier / Pool:</span>
-                      <strong style={{ color: "#0f172a" }}>₹{Number(selectedScheme.total_pool_value).toLocaleString("en-IN")}</strong>
+                {selectedScheme && (() => {
+                  const adj = getAdjustedInstallmentDetails(selectedScheme);
+                  return (
+                    <div
+                      style={{
+                        background: "#f8faff",
+                        border: "1px solid #dbeafe",
+                        borderRadius: "12px",
+                        padding: "14px 16px",
+                        marginBottom: "18px",
+                        fontSize: "13px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ color: "#64748b" }}>Scheme Tier / Pool:</span>
+                        <strong style={{ color: "#0f172a" }}>₹{Number(selectedScheme.total_pool_value).toLocaleString("en-IN")}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <span style={{ color: "#64748b" }}>Gross Monthly Installment:</span>
+                        <strong style={{ color: "#0f172a" }}>₹{Number(adj.grossInstallment).toLocaleString("en-IN")}</strong>
+                      </div>
+                      {adj.isAdjusted && (
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ color: "#059669" }}>Auction Dividend Rebate:</span>
+                          <strong style={{ color: "#059669" }}>-₹{Number(adj.dividendCredit).toLocaleString("en-IN")}</strong>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "6px", borderTop: "1px dashed #cbd5e1", marginTop: "4px" }}>
+                        <span style={{ color: "#047857", fontWeight: "700" }}>Net Payable Next Installment:</span>
+                        <strong style={{ color: "#047857", fontSize: "16px" }}>
+                          ₹{Number(adj.netAdjustedInstallment).toLocaleString("en-IN")}
+                        </strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
+                        <span style={{ color: "#64748b", fontSize: "11px" }}>Duration:</span>
+                        <span style={{ color: "#64748b", fontSize: "11px" }}>
+                          {selectedScheme.total_months} Months (Cycle {selectedScheme.current_month || 1})
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ color: "#64748b" }}>Standard Monthly Installment:</span>
-                      <strong style={{ color: "#0f172a" }}>₹{Number(selectedScheme.monthly_installment).toLocaleString("en-IN")}</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "#64748b" }}>Duration:</span>
-                      <strong style={{ color: "#0f172a" }}>{selectedScheme.total_months} Months (Month {selectedScheme.current_month || 1})</strong>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* GATEWAY MODE */}
                 {payMode === "gateway" ? (

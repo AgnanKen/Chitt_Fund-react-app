@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { supabase } from "../../lib/supabase";
+import {
+  getSchemeMonthlySchedule,
+  getAdjustedInstallmentDetails,
+} from "../../lib/chitCalculations";
 
 const MemberSchemes = ({ onNavigate }) => {
   const { profile } = useAuth();
@@ -21,6 +25,16 @@ const MemberSchemes = ({ onNavigate }) => {
   const [enrollingId, setEnrollingId] = useState(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const handleSettlementUpdate = () => {
+      setRefreshTrigger((prev) => prev + 1);
+    };
+    window.addEventListener("ledgerone:settlement_updated", handleSettlementUpdate);
+    return () => {
+      window.removeEventListener("ledgerone:settlement_updated", handleSettlementUpdate);
+    };
+  }, []);
 
   const memberId = profile?.member_id;
 
@@ -327,11 +341,16 @@ const MemberSchemes = ({ onNavigate }) => {
                     </div>
                     <div>
                       <small style={{ color: "#64748b", fontSize: "11px", display: "block" }}>
-                        MONTHLY INSTALLMENT
+                        CURRENT DUE INSTALLMENT
                       </small>
-                      <strong style={{ fontSize: "15px", color: "#1d4ed8" }}>
-                        ₹{Number(scheme.monthly_installment).toLocaleString("en-IN")}
+                      <strong style={{ fontSize: "15px", color: getAdjustedInstallmentDetails(scheme).isAdjusted ? "#059669" : "#1d4ed8" }}>
+                        ₹{Number(getAdjustedInstallmentDetails(scheme).netAdjustedInstallment).toLocaleString("en-IN")}
                       </strong>
+                      {getAdjustedInstallmentDetails(scheme).isAdjusted && (
+                        <span style={{ fontSize: "10px", color: "#059669", display: "block", fontWeight: "600" }}>
+                          Adjusted (-₹{getAdjustedInstallmentDetails(scheme).dividendCredit.toLocaleString("en-IN")})
+                        </span>
+                      )}
                     </div>
                     <div>
                       <small style={{ color: "#64748b", fontSize: "11px", display: "block" }}>
@@ -465,11 +484,16 @@ const MemberSchemes = ({ onNavigate }) => {
                     </div>
                     <div>
                       <small style={{ color: "#64748b", fontSize: "11px", display: "block" }}>
-                        MONTHLY INSTALLMENT
+                        CURRENT DUE INSTALLMENT
                       </small>
-                      <strong style={{ fontSize: "15px", color: "#1d4ed8" }}>
-                        ₹{Number(scheme.monthly_installment).toLocaleString("en-IN")}
+                      <strong style={{ fontSize: "15px", color: getAdjustedInstallmentDetails(scheme).isAdjusted ? "#059669" : "#1d4ed8" }}>
+                        ₹{Number(getAdjustedInstallmentDetails(scheme).netAdjustedInstallment).toLocaleString("en-IN")}
                       </strong>
+                      {getAdjustedInstallmentDetails(scheme).isAdjusted && (
+                        <span style={{ fontSize: "10px", color: "#059669", display: "block", fontWeight: "600" }}>
+                          Adjusted (-₹{getAdjustedInstallmentDetails(scheme).dividendCredit.toLocaleString("en-IN")})
+                        </span>
+                      )}
                     </div>
                     <div>
                       <small style={{ color: "#64748b", fontSize: "11px", display: "block" }}>
@@ -531,9 +555,9 @@ const MemberSchemes = ({ onNavigate }) => {
               }}
             >
               <div>
-                <h3 style={{ margin: 0 }}>{selectedSchemeSchedule.name} — Schedule</h3>
+                <h3 style={{ margin: 0 }}>{selectedSchemeSchedule.name} — Monthly Schedule</h3>
                 <span style={{ fontSize: "12px", color: "#64748b" }}>
-                  Installment details and duration schedule
+                  Dynamic installment schedule adjusted by monthly auction dividends
                 </span>
               </div>
               <button
@@ -546,42 +570,95 @@ const MemberSchemes = ({ onNavigate }) => {
               </button>
             </div>
 
-            <div style={{ overflowX: "auto", maxHeight: "400px", border: "1px solid #edf2fb", borderRadius: "12px" }}>
+            {/* Statutory Chit Fund Dividend Adjustment Notice */}
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "10px",
+                padding: "12px 14px",
+                marginBottom: "16px",
+                fontSize: "12px",
+                color: "#166534",
+                lineHeight: "1.5",
+              }}
+            >
+              <strong>💡 Statutory Chit Dividend Adjustment:</strong> Under The Chit Funds Act, monthly installments vary each round because member bids generate a dividend. Month 1 starts at the full gross installment. In Month 2, peak auction bids adjust member installments down to <strong>₹21,250</strong> (or gross minus dividend). Winner prize disbursements are marked <strong>PENDING</strong> until surety verification.
+            </div>
+
+            <div style={{ overflowX: "auto", maxHeight: "420px", border: "1px solid #edf2fb", borderRadius: "12px" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ background: "#f8faff", borderBottom: "1px solid #e2e8f0", textAlign: "left" }}>
-                    <th style={{ padding: "10px 14px", color: "#64748b" }}>MONTH</th>
-                    <th style={{ padding: "10px 14px", color: "#64748b" }}>MONTHLY INSTALLMENT</th>
-                    <th style={{ padding: "10px 14px", color: "#64748b" }}>TOTAL POOL</th>
+                    <th style={{ padding: "10px 14px", color: "#64748b" }}>CYCLE</th>
+                    <th style={{ padding: "10px 14px", color: "#64748b" }}>GROSS DUE</th>
+                    <th style={{ padding: "10px 14px", color: "#64748b" }}>AUCTION DIVIDEND</th>
+                    <th style={{ padding: "10px 14px", color: "#047857" }}>NET INSTALLMENT</th>
+                    <th style={{ padding: "10px 14px", color: "#64748b" }}>AUCTION / WINNER STATUS</th>
                     <th style={{ padding: "10px 14px", color: "#64748b" }}>STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: selectedSchemeSchedule.total_months || 20 }).map((_, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "10px 14px", fontWeight: "600" }}>Month {i + 1}</td>
-                      <td style={{ padding: "10px 14px" }}>
-                        ₹{Number(selectedSchemeSchedule.monthly_installment).toLocaleString("en-IN")}
+                  {getSchemeMonthlySchedule(selectedSchemeSchedule).map((item) => (
+                    <tr
+                      key={item.monthNumber}
+                      style={{
+                        borderBottom: "1px solid #f1f5f9",
+                        background: item.status === "Current Cycle" ? "#fbfdff" : "transparent",
+                      }}
+                    >
+                      <td style={{ padding: "10px 14px", fontWeight: "700", color: "#1e293b" }}>
+                        {item.monthLabel}
                       </td>
                       <td style={{ padding: "10px 14px", color: "#64748b" }}>
-                        ₹{Number(selectedSchemeSchedule.total_pool_value).toLocaleString("en-IN")}
+                        ₹{item.grossInstallment.toLocaleString("en-IN")}
+                      </td>
+                      <td style={{ padding: "10px 14px" }}>
+                        {item.dividendEarned > 0 ? (
+                          <span style={{ color: "#059669", fontWeight: "600" }}>
+                            -₹{item.dividendEarned.toLocaleString("en-IN")}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#94a3b8" }}>— (Inaugural)</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 14px" }}>
+                        <strong
+                          style={{
+                            fontSize: "14px",
+                            color: item.isAdjusted ? "#047857" : "#1e293b",
+                          }}
+                        >
+                          ₹{item.netInstallment.toLocaleString("en-IN")}
+                        </strong>
+                        {item.isAdjusted && (
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "10px",
+                              color: "#059669",
+                              fontWeight: "600",
+                            }}
+                          >
+                            Adjusted
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 14px", fontSize: "12px", color: "#475467" }}>
+                        {item.winnerInfo}
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <span
                           className={`status-tag ${
-                            i + 1 < (selectedSchemeSchedule.current_month || 1)
+                            item.status === "Completed"
                               ? "approved"
-                              : i + 1 === (selectedSchemeSchedule.current_month || 1)
+                              : item.status === "Current Cycle"
                               ? "pending"
                               : "upcoming"
                           }`}
                           style={{ fontSize: "11px", padding: "2px 8px" }}
                         >
-                          {i + 1 < (selectedSchemeSchedule.current_month || 1)
-                            ? "Completed"
-                            : i + 1 === (selectedSchemeSchedule.current_month || 1)
-                            ? "Current Cycle"
-                            : "Upcoming"}
+                          {item.status}
                         </span>
                       </td>
                     </tr>

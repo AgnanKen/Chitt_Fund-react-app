@@ -1,4 +1,3 @@
-
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +14,7 @@ import {
 const Sidebar = ({
   sidebarOpen,
   setSidebarOpen,
+  sidebarHidden = false,
   activeMenu = "Dashboard",
   onSelectMenu,
   role = "admin",
@@ -54,7 +54,7 @@ const Sidebar = ({
     <>
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
+      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}>
         <div
           className="sidebar-logo"
           style={{ cursor: "pointer" }}
@@ -66,11 +66,13 @@ const Sidebar = ({
           <span>LedgerOne</span>
 
           <button
+            type="button"
             className="mobile-close"
             onClick={(e) => {
               e.stopPropagation();
               setSidebarOpen(false);
             }}
+            aria-label="Close sidebar"
           >
             <X size={20} />
           </button>
