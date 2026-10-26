@@ -188,9 +188,10 @@ CREATE POLICY "Public & Authenticated read bids" ON bids FOR SELECT USING (true)
 CREATE POLICY "Public & Authenticated read payments" ON payments FOR SELECT USING (true);
 CREATE POLICY "Public & Authenticated read activities" ON activities FOR SELECT USING (true);
 
--- 4.2 INSERT Policies: Allow creating members, placing bids, submitting payments
+-- 4.2 INSERT Policies: Allow creating members, auctions, placing bids, submitting payments
 CREATE POLICY "Allow insert members" ON members FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert chit_schemes" ON chit_schemes FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow insert auctions" ON auctions FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert bids" ON bids FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert payments" ON payments FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert activities" ON activities FOR INSERT WITH CHECK (true);
@@ -201,6 +202,10 @@ CREATE POLICY "Allow update chit_schemes" ON chit_schemes FOR UPDATE USING (true
 CREATE POLICY "Allow update auctions" ON auctions FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update payments" ON payments FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update activities" ON activities FOR UPDATE USING (true) WITH CHECK (true);
+
+-- 4.4 DELETE Policies: Allow deleting auctions
+CREATE POLICY "Allow delete auctions" ON auctions FOR DELETE USING (true);
+
 
 -- ====================================================================
 -- 5. REALTIME REPLICATION CONFIGURATION

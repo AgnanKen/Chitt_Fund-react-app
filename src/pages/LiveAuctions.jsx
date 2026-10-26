@@ -6,6 +6,10 @@ import {
   Users,
   Sparkles,
   CheckCircle,
+  AlertTriangle,
+  ChevronRight,
+  ShieldCheck,
+  Trophy,
 } from "lucide-react";
 import {
   supabase,
@@ -49,7 +53,7 @@ const LiveAuctions = ({ onNavigate }) => {
   const currentUserName =
     profile?.full_name ||
     (user?.email ? user.email.split("@")[0] : "Participant");
-  const bidderName = `${currentUserName} (You)`;
+  const bidderName = `${currentUserName}`;
   const [bidAmountInput, setBidAmountInput] = useState("");
   const [bidding, setBidding] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
@@ -88,7 +92,9 @@ const LiveAuctions = ({ onNavigate }) => {
           if (error) throw error;
           if (data && data.length > 0) {
             setAuctions(data);
-            setSelectedAuctionId(data[0].id);
+            if (!selectedAuctionId || !data.some((a) => a.id === selectedAuctionId)) {
+              setSelectedAuctionId(data[0].id);
+            }
           }
         } catch (err) {
           console.warn("Supabase fetch failed for auctions:", err.message);
@@ -101,21 +107,23 @@ const LiveAuctions = ({ onNavigate }) => {
     if (isSupabaseConfigured()) {
       // Listen to bids table
       const bidsChannel = supabase
-        .channel("realtime:bids")
+        .channel("realtime:member_bids")
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "bids" },
           (payload) => {
             const newBid = payload.new;
-            setBidHistory((prev) => [
-              {
-                id: newBid.id,
-                bidder_name: newBid.bidder_name,
-                bid_amount: Number(newBid.bid_amount),
-                time: "Just now",
-              },
-              ...prev,
-            ]);
+            if (newBid.auction_id === selectedAuctionId) {
+              setBidHistory((prev) => [
+                {
+                  id: newBid.id,
+                  bidder_name: newBid.bidder_name,
+                  bid_amount: Number(newBid.bid_amount),
+                  time: "Just now",
+                },
+                ...prev,
+              ]);
+            }
 
             // Update auctions in UI
             setAuctions((prev) =>
@@ -137,14 +145,20 @@ const LiveAuctions = ({ onNavigate }) => {
 
       // Listen to auctions table
       const auctionsChannel = supabase
-        .channel("realtime:auctions")
+        .channel("realtime:member_auctions")
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "auctions" },
+          { event: "*", schema: "public", table: "auctions" },
           (payload) => {
-            setAuctions((prev) =>
-              prev.map((a) => (a.id === payload.new.id ? payload.new : a))
-            );
+            if (payload.eventType === "INSERT") {
+              setAuctions((prev) => [payload.new, ...prev]);
+            } else if (payload.eventType === "UPDATE") {
+              setAuctions((prev) =>
+                prev.map((a) => (a.id === payload.new.id ? payload.new : a))
+              );
+            } else if (payload.eventType === "DELETE") {
+              setAuctions((prev) => prev.filter((a) => a.id !== payload.old.id));
+            }
           }
         )
         .subscribe();
@@ -154,10 +168,47 @@ const LiveAuctions = ({ onNavigate }) => {
         supabase.removeChannel(auctionsChannel);
       };
     }
-  }, []);
+  }, [selectedAuctionId]);
+
+  // Fetch bids history when selected auction changes
+  useEffect(() => {
+    const fetchAuctionBids = async () => {
+      if (isSupabaseConfigured() && selectedAuctionId) {
+        try {
+          const { data } = await supabase
+            .from("bids")
+            .select("*")
+            .eq("auction_id", selectedAuctionId)
+            .order("created_at", { ascending: false });
+
+          if (data && data.length > 0) {
+            setBidHistory(
+              data.map((b) => ({
+                id: b.id,
+                bidder_name: b.bidder_name,
+                bid_amount: Number(b.bid_amount),
+                time: new Date(b.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              }))
+            );
+          }
+        } catch (err) {
+          console.warn("Could not fetch bids for auction:", err);
+        }
+      }
+    };
+
+    fetchAuctionBids();
+  }, [selectedAuctionId]);
 
   const activeAuction =
-    auctions.find((a) => a.id === selectedAuctionId) || auctions[0];
+    auctions.find((a) => a.id === selectedAuctionId) || auctions[0] || {};
+
+  const isLive = activeAuction.is_live || activeAuction.status === "live";
+  const isCompleted = activeAuction.status === "completed";
+  const isScheduled = activeAuction.status === "scheduled" && !isLive;
 
   const currentHighestBid = Number(
     activeAuction.highest_bid ||
@@ -169,8 +220,19 @@ const LiveAuctions = ({ onNavigate }) => {
   const currentPrizeValue = basePot - currentHighestBid;
   const dividendPerMember = Math.round(currentHighestBid / 20);
 
+  const leadingBidderName =
+    activeAuction.highest_bidder_name || activeAuction.bidder || "Priya M.";
+  const isUserLeading =
+    leadingBidderName.toLowerCase().includes(currentUserName.toLowerCase()) ||
+    leadingBidderName.toLowerCase().includes("you");
+
   // Place Bid Handler
   const handlePlaceBid = async (amountToBid) => {
+    if (!isLive) {
+      alert("This auction is not currently open for live bidding.");
+      return;
+    }
+
     const kycStatus = profile?.members?.kyc_status || "Pending";
     if (role === "member" && kycStatus !== "Approved") {
       alert(
@@ -190,6 +252,17 @@ const LiveAuctions = ({ onNavigate }) => {
       return;
     }
 
+    // Statutory Cap check (max 30% discount under Chit Funds Act)
+    const maxDiscountAllowed = Math.round(basePot * 0.4);
+    if (numAmount > maxDiscountAllowed) {
+      alert(
+        `Discount bid exceeds statutory cap under The Chit Funds Act (Max ₹${maxDiscountAllowed.toLocaleString(
+          "en-IN"
+        )})`
+      );
+      return;
+    }
+
     setBidding(true);
 
     if (isSupabaseConfigured()) {
@@ -197,12 +270,24 @@ const LiveAuctions = ({ onNavigate }) => {
         const { error } = await supabase.from("bids").insert([
           {
             auction_id: activeAuction.id,
-            bidder_name: bidderName,
+            member_id: profile?.member_id || null,
+            bidder_name: `${currentUserName} (You)`,
             bid_amount: numAmount,
           },
         ]);
 
         if (error) throw error;
+
+        // Also update auctions table
+        await supabase
+          .from("auctions")
+          .update({
+            highest_bid: numAmount,
+            highest_bidder_name: `${currentUserName} (You)`,
+            highest_bidder_id: profile?.member_id || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", activeAuction.id);
       } catch (err) {
         console.error("Failed to insert bid:", err.message);
         alert("Failed to place bid on Supabase: " + err.message);
@@ -212,7 +297,7 @@ const LiveAuctions = ({ onNavigate }) => {
       setBidHistory((prev) => [
         {
           id: "bid-" + Date.now(),
-          bidder_name: bidderName,
+          bidder_name: `${currentUserName} (You)`,
           bid_amount: numAmount,
           time: "Just now",
         },
@@ -225,9 +310,9 @@ const LiveAuctions = ({ onNavigate }) => {
             ? {
                 ...a,
                 highest_bid: numAmount,
-                highest_bidder_name: bidderName,
+                highest_bidder_name: `${currentUserName} (You)`,
                 bid: `₹${numAmount.toLocaleString("en-IN")}`,
-                bidder: bidderName,
+                bidder: `${currentUserName} (You)`,
               }
             : a
         )
@@ -237,9 +322,9 @@ const LiveAuctions = ({ onNavigate }) => {
     setBidAmountInput("");
     setBidding(false);
     setFeedbackMsg(
-      `Bid of ₹${numAmount.toLocaleString("en-IN")} placed successfully!`
+      `Your bid of ₹${numAmount.toLocaleString("en-IN")} has been placed successfully!`
     );
-    setTimeout(() => setFeedbackMsg(null), 3500);
+    setTimeout(() => setFeedbackMsg(null), 3800);
   };
 
   return (
@@ -255,11 +340,11 @@ const LiveAuctions = ({ onNavigate }) => {
             color: "#ffffff",
             padding: "12px 20px",
             borderRadius: "10px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            zIndex: 3000,
+            zIndex: 4000,
             fontSize: "13px",
             fontWeight: "500",
           }}
@@ -269,30 +354,136 @@ const LiveAuctions = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* TOP METRICS */}
-      <section className="main-stats-grid" style={{ marginBottom: "26px" }}>
+      {/* AUCTION SELECTOR BAR (Choose from all available auctions) */}
+      <div style={{ marginBottom: "20px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "10px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "12px",
+              fontWeight: "700",
+              color: "#475467",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            Select Chit Auction Hall ({auctions.length} Available)
+          </span>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>
+            Click an auction below to enter and bid
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            overflowX: "auto",
+            paddingBottom: "8px",
+          }}
+        >
+          {auctions.map((auc) => {
+            const isSelected = auc.id === activeAuction.id;
+            const isAucLive = auc.is_live || auc.status === "live";
+            const isAucCompleted = auc.status === "completed";
+            const highBid = Number(auc.highest_bid || auc.bid_amount || 0);
+
+            return (
+              <div
+                key={auc.id}
+                onClick={() => setSelectedAuctionId(auc.id)}
+                style={{
+                  minWidth: "240px",
+                  background: isSelected ? "#ffffff" : "#f8fafc",
+                  border: isSelected ? "2px solid #2850c7" : "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  boxShadow: isSelected ? "0 4px 14px rgba(40, 80, 199, 0.12)" : "none",
+                  transition: "all 0.15s ease",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "4px",
+                  }}
+                >
+                  <strong
+                    style={{
+                      fontSize: "13px",
+                      color: isSelected ? "#2850c7" : "#1e293b",
+                    }}
+                  >
+                    {auc.scheme_name || auc.name}
+                  </strong>
+                  {isAucLive ? (
+                    <div className="live-pulse-badge" style={{ padding: "2px 6px", fontSize: "9px" }}>
+                      <div className="live-pulse-dot" style={{ width: "5px", height: "5px" }} />
+                      <span>LIVE</span>
+                    </div>
+                  ) : isAucCompleted ? (
+                    <span style={{ fontSize: "9px", color: "#15803d", fontWeight: "700" }}>CLOSED</span>
+                  ) : (
+                    <span style={{ fontSize: "9px", color: "#b45309", fontWeight: "700" }}>UPCOMING</span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "11px",
+                    color: "#64748b",
+                    marginTop: "6px",
+                  }}
+                >
+                  <span>Pot: ₹{Number(auc.base_pot_value || 100000).toLocaleString("en-IN")}</span>
+                  <span style={{ fontWeight: "700", color: "#059669" }}>
+                    High: ₹{highBid.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* TOP METRICS FOR SELECTED AUCTION */}
+      <section className="main-stats-grid" style={{ marginBottom: "24px" }}>
         <div className="main-stat-card">
           <div className="stat-card-top">
             <div className="stat-icon blue">
-              <Gavel size={22} />
+              <Gavel size={20} />
             </div>
-            <span className="stat-change">Live Auction Hall</span>
+            <span className="stat-change">{activeAuction.scheme_name || activeAuction.name}</span>
           </div>
           <div className="stat-card-content">
-            <p>ACTIVE AUCTIONS</p>
-            <h2>{auctions.filter((a) => a.is_live || a.live).length} Live</h2>
+            <p>GROSS CHIT POT</p>
+            <h2>₹{basePot.toLocaleString("en-IN")}</h2>
           </div>
         </div>
 
         <div className="main-stat-card">
           <div className="stat-card-top">
             <div className="stat-icon green">
-              <IndianRupee size={22} />
+              <IndianRupee size={20} />
             </div>
-            <span className="stat-change">+8.4% today</span>
+            <span className="stat-change" style={{ color: "#10b486", fontWeight: "700" }}>
+              Winner: {leadingBidderName}
+            </span>
           </div>
           <div className="stat-card-content">
-            <p>HIGHEST DISCOUNT BID</p>
+            <p>LEADING DISCOUNT BID</p>
             <h2>₹{currentHighestBid.toLocaleString("en-IN")}</h2>
           </div>
         </div>
@@ -300,9 +491,9 @@ const LiveAuctions = ({ onNavigate }) => {
         <div className="main-stat-card">
           <div className="stat-card-top">
             <div className="stat-icon yellow">
-              <Sparkles size={22} />
+              <Sparkles size={20} />
             </div>
-            <span className="stat-change">Member Benefit</span>
+            <span className="stat-change">Your Dividend</span>
           </div>
           <div className="stat-card-content">
             <p>EST. DIVIDEND PER MEMBER</p>
@@ -313,16 +504,88 @@ const LiveAuctions = ({ onNavigate }) => {
         <div className="main-stat-card">
           <div className="stat-card-top">
             <div className="stat-icon blue">
-              <Users size={22} />
+              <Users size={20} />
             </div>
-            <span className="stat-change">18 Enrolled</span>
+            <span className="stat-change">{activeAuction.members_info || "20 Members"}</span>
           </div>
           <div className="stat-card-content">
-            <p>BIDDER PARTICIPATION</p>
-            <h2>90% Active</h2>
+            <p>WINNER PRIZE PAYOUT</p>
+            <h2>₹{currentPrizeValue.toLocaleString("en-IN")}</h2>
           </div>
         </div>
       </section>
+
+      {/* PERSONAL BIDDER STATUS BANNER */}
+      {isLive && (
+        <div
+          style={{
+            background: isUserLeading
+              ? "linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)"
+              : "#f8fafc",
+            border: isUserLeading ? "1px solid #86efac" : "1px solid #e2e8f0",
+            borderRadius: "12px",
+            padding: "14px 18px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {isUserLeading ? (
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  background: "#10b486",
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "16px",
+                }}
+              >
+                👑
+              </div>
+            ) : (
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  background: "#e2e8f0",
+                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "16px",
+                }}
+              >
+                ⚡
+              </div>
+            )}
+            <div>
+              <strong style={{ fontSize: "14px", color: isUserLeading ? "#064e3b" : "#1e293b" }}>
+                {isUserLeading
+                  ? "🎉 You are currently the HIGHEST BIDDER in this auction!"
+                  : `Leading Bidder: ${leadingBidderName} at ₹${currentHighestBid.toLocaleString("en-IN")}`}
+              </strong>
+              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                {isUserLeading
+                  ? `If no higher bids are placed, you will take home the net prize of ₹${currentPrizeValue.toLocaleString("en-IN")}.`
+                  : "Place a higher discount bid to claim the chit fund prize for this month."}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: "12px", color: "#64748b" }}>
+            Min next bid: <strong style={{ color: "#1e293b" }}>₹{(currentHighestBid + 500).toLocaleString("en-IN")}</strong>
+          </div>
+        </div>
+      )}
 
       {/* AUCTION HALL MAIN GRID */}
       <div className="auction-layout-grid">
@@ -339,20 +602,26 @@ const LiveAuctions = ({ onNavigate }) => {
                   color: "#2850c7",
                 }}
               >
-                LIVE AUCTION STAGE
+                ACTIVE AUCTION STAGE
               </span>
-              <h2 style={{ fontSize: "20px", fontWeight: "700", marginTop: "4px" }}>
+              <h2 style={{ fontSize: "20px", fontWeight: "700", marginTop: "4px", margin: 0 }}>
                 {activeAuction.name || activeAuction.scheme_name}
               </h2>
-              <p style={{ fontSize: "12px", color: "#667085", marginTop: "2px" }}>
-                Base Pot Value: ₹{basePot.toLocaleString("en-IN")} · 20 Members
+              <p style={{ fontSize: "12px", color: "#667085", marginTop: "2px", margin: 0 }}>
+                Gross Chit Value: ₹{basePot.toLocaleString("en-IN")} · 20 Subscribers
               </p>
             </div>
 
-            <div className="live-pulse-badge">
-              <div className="live-pulse-dot"></div>
-              <span>LIVE BIDDING</span>
-            </div>
+            {isLive ? (
+              <div className="live-pulse-badge">
+                <div className="live-pulse-dot" />
+                <span>LIVE BIDDING</span>
+              </div>
+            ) : isCompleted ? (
+              <span className="status-tag approved">SETTLED</span>
+            ) : (
+              <span className="status-tag pending">UPCOMING SCHEDULED</span>
+            )}
           </div>
 
           {/* TIMER BANNER */}
@@ -372,7 +641,7 @@ const LiveAuctions = ({ onNavigate }) => {
               <Clock3 size={20} color="#f2a20a" />
               <div>
                 <div style={{ fontSize: "11px", color: "#8a96ab" }}>
-                  AUCTION CLOSING COUNTDOWN
+                  {isLive ? "AUCTION CLOSING COUNTDOWN" : "AUCTION STATUS"}
                 </div>
                 <div
                   style={{
@@ -380,9 +649,10 @@ const LiveAuctions = ({ onNavigate }) => {
                     fontWeight: "800",
                     letterSpacing: "1px",
                     fontFamily: "monospace",
+                    color: isLive ? "#ffffff" : "#94a3b8",
                   }}
                 >
-                  {formatTimer(timeLeft)}
+                  {isLive ? formatTimer(timeLeft) : (isCompleted ? "AUCTION CLOSED" : "STARTS SHORTLY")}
                 </div>
               </div>
             </div>
@@ -418,66 +688,108 @@ const LiveAuctions = ({ onNavigate }) => {
                 LEADING BIDDER
               </span>
               <div style={{ fontSize: "16px", fontWeight: "700", color: "#1a2436", marginTop: "3px" }}>
-                {activeAuction.bidder || activeAuction.highest_bidder_name || "Priya M."}
+                {leadingBidderName}
               </div>
             </div>
           </div>
 
-          {/* QUICK BID INCREMENTS */}
-          <div>
-            <span style={{ fontSize: "12px", fontWeight: "600", color: "#475467" }}>
-              Quick Increment Bids:
-            </span>
-            <div className="quick-bids">
-              <button
-                className="quick-bid-btn"
-                onClick={() => handlePlaceBid(currentHighestBid + 500)}
-                disabled={bidding}
-              >
-                + ₹500 (₹{(currentHighestBid + 500).toLocaleString("en-IN")})
-              </button>
-              <button
-                className="quick-bid-btn"
-                onClick={() => handlePlaceBid(currentHighestBid + 1000)}
-                disabled={bidding}
-              >
-                + ₹1,000 (₹{(currentHighestBid + 1000).toLocaleString("en-IN")})
-              </button>
-              <button
-                className="quick-bid-btn"
-                onClick={() => handlePlaceBid(currentHighestBid + 2500)}
-                disabled={bidding}
-              >
-                + ₹2,500 (₹{(currentHighestBid + 2500).toLocaleString("en-IN")})
-              </button>
-            </div>
-          </div>
+          {/* QUICK BID INCREMENTS & CUSTOM BID */}
+          {isLive ? (
+            <>
+              <div>
+                <span style={{ fontSize: "12px", fontWeight: "600", color: "#475467" }}>
+                  Quick Increment Bids:
+                </span>
+                <div className="quick-bids">
+                  <button
+                    className="quick-bid-btn"
+                    onClick={() => handlePlaceBid(currentHighestBid + 500)}
+                    disabled={bidding}
+                  >
+                    + ₹500 (₹{(currentHighestBid + 500).toLocaleString("en-IN")})
+                  </button>
+                  <button
+                    className="quick-bid-btn"
+                    onClick={() => handlePlaceBid(currentHighestBid + 1000)}
+                    disabled={bidding}
+                  >
+                    + ₹1,000 (₹{(currentHighestBid + 1000).toLocaleString("en-IN")})
+                  </button>
+                  <button
+                    className="quick-bid-btn"
+                    onClick={() => handlePlaceBid(currentHighestBid + 2500)}
+                    disabled={bidding}
+                  >
+                    + ₹2,500 (₹{(currentHighestBid + 2500).toLocaleString("en-IN")})
+                  </button>
+                </div>
+              </div>
 
-          {/* CUSTOM BID INPUT */}
-          <div style={{ marginTop: "18px" }}>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "#475467" }}>
-              Enter Custom Bid Amount (₹):
-            </label>
-            <div className="bid-input-group">
-              <input
-                type="number"
-                placeholder={`Must be > ₹${currentHighestBid}`}
-                value={bidAmountInput}
-                onChange={(e) => setBidAmountInput(e.target.value)}
-              />
-              <button
-                className="btn-primary"
-                style={{ height: "42px", padding: "0 22px" }}
-                disabled={bidding || !bidAmountInput}
-                onClick={() => handlePlaceBid(bidAmountInput)}
-              >
-                {bidding ? "Broadcasting..." : "Place Bid"}
-              </button>
+              {/* CUSTOM BID INPUT */}
+              <div style={{ marginTop: "18px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "#475467" }}>
+                  Enter Custom Bid Amount (₹):
+                </label>
+                <div className="bid-input-group">
+                  <input
+                    type="number"
+                    placeholder={`Must be > ₹${currentHighestBid}`}
+                    value={bidAmountInput}
+                    onChange={(e) => setBidAmountInput(e.target.value)}
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ height: "42px", padding: "0 22px" }}
+                    disabled={bidding || !bidAmountInput}
+                    onClick={() => handlePlaceBid(bidAmountInput)}
+                  >
+                    {bidding ? "Broadcasting..." : "Place Bid"}
+                  </button>
+                </div>
+                <p style={{ fontSize: "11px", color: "#8a94a4", marginTop: "6px" }}>
+                  * Bids are synchronized in real-time across all connected members via Supabase Realtime.
+                </p>
+              </div>
+            </>
+          ) : isCompleted ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "24px",
+                background: "#f0fdf4",
+                borderRadius: "12px",
+                border: "1px solid #bbf7d0",
+                marginTop: "16px",
+              }}
+            >
+              <Trophy size={32} color="#15803d" style={{ margin: "0 auto 8px" }} />
+              <strong style={{ fontSize: "16px", color: "#166534", display: "block" }}>
+                Auction Has Ended
+              </strong>
+              <p style={{ fontSize: "12px", color: "#15803d", marginTop: "4px" }}>
+                Awarded to <strong>{leadingBidderName}</strong> for discount bid of ₹{currentHighestBid.toLocaleString("en-IN")}.
+              </p>
             </div>
-            <p style={{ fontSize: "11px", color: "#8a94a4", marginTop: "6px" }}>
-              * Bids are synchronized in real-time across all connected members via Supabase Realtime.
-            </p>
-          </div>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "24px",
+                background: "#fffbeb",
+                borderRadius: "12px",
+                border: "1px solid #fde68a",
+                marginTop: "16px",
+              }}
+            >
+              <Clock3 size={32} color="#b45309" style={{ margin: "0 auto 8px" }} />
+              <strong style={{ fontSize: "16px", color: "#92400e", display: "block" }}>
+                Auction Scheduled
+              </strong>
+              <p style={{ fontSize: "12px", color: "#b45309", marginTop: "4px" }}>
+                This auction is scheduled and will open as soon as the Foreman initiates live bidding.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* RIGHT: REAL-TIME BID HISTORY STREAM */}
@@ -485,7 +797,7 @@ const LiveAuctions = ({ onNavigate }) => {
           <div className="section-header">
             <div>
               <h2>Live Bid Stream</h2>
-              <p>Real-time updates via Supabase</p>
+              <p>{activeAuction.scheme_name || activeAuction.name}</p>
             </div>
             <div className="live-indicator">
               <span></span>
