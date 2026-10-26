@@ -371,8 +371,13 @@ const Payments = () => {
 
                     <td>
                       <div>
-                        <span style={{ fontWeight: 600, color: "#344054" }}>
-                          {payment.payment_type || "Installment"}
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: payment.payment_type === "Payout" ? "#b45309" : "#344054",
+                          }}
+                        >
+                          {payment.payment_type === "Payout" ? "🏆 Prize Disbursement" : (payment.payment_type || "Installment")}
                         </span>
                         <div style={{ fontSize: "11px", color: "#8894a6" }}>
                           via {payment.payment_method || "UPI"}
@@ -395,15 +400,28 @@ const Payments = () => {
                       </span>
                     </td>
 
-                    <td className="amount-cell">
-                      ₹{Number(payment.amount || 0).toLocaleString("en-IN")}
+                    <td
+                      className="amount-cell"
+                      style={{
+                        color: payment.payment_type === "Payout" ? "#059669" : "inherit",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {payment.payment_type === "Payout" ? "+" : ""}₹{Number(payment.amount || 0).toLocaleString("en-IN")}
                     </td>
 
                     <td>
                       <span
                         className={`status-badge ${(payment.status || "pending").toLowerCase()}`}
+                        style={{
+                          background: payment.payment_type === "Payout" && payment.status === "Pending" ? "#fef3c7" : undefined,
+                          color: payment.payment_type === "Payout" && payment.status === "Pending" ? "#b45309" : undefined,
+                          border: payment.payment_type === "Payout" && payment.status === "Pending" ? "1px solid #fde68a" : undefined,
+                        }}
                       >
-                        {payment.status || "Pending"}
+                        {payment.payment_type === "Payout" && payment.status === "Pending"
+                          ? "DISBURSEMENT PENDING"
+                          : payment.status || "Pending"}
                       </span>
                     </td>
 
@@ -419,10 +437,10 @@ const Payments = () => {
                         {payment.status !== "Approved" && (
                           <button
                             className="btn-sm-action btn-sm-approve"
-                            title="Approve Transaction"
+                            title={payment.payment_type === "Payout" ? "Disburse Prize Payout" : "Approve Transaction"}
                             onClick={() => handleUpdateStatus(payment.id, "Approved")}
                           >
-                            Approve
+                            {payment.payment_type === "Payout" ? "Disburse" : "Approve"}
                           </button>
                         )}
                         {payment.status !== "Rejected" && (
